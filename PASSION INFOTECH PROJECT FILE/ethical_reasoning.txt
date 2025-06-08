@@ -1,0 +1,18 @@
+Ethical Reasoning for Crowdfunding Checker Project
+
+This project implements basic ethical safeguards to ensure trust in a crowdfunding platform:
+
+1. Fund Limit Rule:
+   Campaigns requesting unrealistic or extremely high amounts are flagged to prevent scams.
+
+2. Address Requirement:
+   Submissions without a valid address are rejected, helping ensure traceability.
+
+3. Company Verification:
+   BeautifulSoup is used to check whether the provided company name exists in a trusted list.
+   This helps reduce fake organization entries.
+
+4. Admin Review:
+   Final decision to approve or reject lies with a human reviewer to balance automation and fairness.
+
+These rules protect donors from fraud while being fair to genuine campaigners.
