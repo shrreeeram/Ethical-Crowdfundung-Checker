@@ -1,16 +1,26 @@
 from flask import Flask, render_template, request, redirect, url_for
 from bs4 import BeautifulSoup
-import os
+import requests
 
 app = Flask(__name__)
-app.secret_key = 'secret123'  # Needed if you want to use flash messages later
+app.secret_key = 'secret123'  # For flash messaging if needed
 
-# In-memory storage of campaigns (demo purpose)
+# In-memory storage
 campaigns = []
 approved_campaigns = []
 
+def company_exists_online(company_name):
+    try:
+        search_url = f"https://www.zaubacorp.com/companysearchresults/{company_name.replace(' ', '%20')}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        return company_name.lower() in soup.text.lower()
+    except Exception:
+        return False
+
 def is_legitimate(campaign):
-    # Rule 1: Check if amount is integer and <= 100000
+    # Rule 1: Check amount
     try:
         amount = int(campaign['amount'])
     except ValueError:
@@ -19,27 +29,13 @@ def is_legitimate(campaign):
     if amount > 100000:
         return False, "Requested amount too high"
 
-    # Rule 2: Check if address is not empty
+    # Rule 2: Address check
     if not campaign['address'].strip():
         return False, "Invalid address"
 
-    # Rule 3: Check if company exists in verified list (dummy_data.html)
-    dummy_file = 'dummy_data.html'
-    if not os.path.exists(dummy_file):
-        return False, "dummy_data.html file not found"
-
-    try:
-        with open(dummy_file, 'r', encoding='utf-8') as f:
-            soup = BeautifulSoup(f, 'html.parser')
-            company_tags = soup.find_all('li')
-            if not company_tags:
-                return False, "No companies found in dummy_data.html"
-            companies = [tag.text.strip().lower() for tag in company_tags]
-    except Exception as e:
-        return False, f"Error reading dummy_data.html: {str(e)}"
-
-    if campaign['company'].strip().lower() not in companies:
-        return False, "Company not found in verified list"
+    # Rule 3: Company check
+    if not company_exists_online(campaign['company'].strip()):
+        return False, "Company not found on ZaubaCorp"
 
     return True, "Legitimate"
 
@@ -57,17 +53,17 @@ def submit():
         'company': request.form.get('company', '').strip(),
     }
 
+    # Check for empty fields
     if not all(data.values()):
         data['status'] = 'Rejected'
         data['reason'] = 'Please fill in all fields'
-        campaigns.append(data)
-        return redirect(url_for('index'))
+    else:
+        # Optional: Keep reason from legitimacy check but allow admin decision
+        _, reason = is_legitimate(data)
+        data['status'] = 'Pending'
+        data['reason'] = reason
 
-    result, reason = is_legitimate(data)
-    data['status'] = 'Pending' if result else 'Rejected'
-    data['reason'] = reason
     campaigns.append(data)
-
     return redirect(url_for('index'))
 
 @app.route('/admin')
@@ -76,25 +72,19 @@ def admin():
 
 @app.route('/approve/<int:id>', methods=['POST'])
 def approve(id):
-    if id < 0 or id >= len(campaigns):
-        return redirect(url_for('admin'))
-
-    reason = request.form.get('reason', 'Approved by admin')
-    campaigns[id]['status'] = 'Approved'
-    campaigns[id]['reason'] = reason
-    approved_campaigns.append(campaigns[id])
-
+    if 0 <= id < len(campaigns):
+        reason = request.form.get('reason', 'Approved by admin')
+        campaigns[id]['status'] = 'Approved'
+        campaigns[id]['reason'] = reason
+        approved_campaigns.append(campaigns[id])
     return redirect(url_for('admin'))
 
 @app.route('/reject/<int:id>', methods=['POST'])
 def reject(id):
-    if id < 0 or id >= len(campaigns):
-        return redirect(url_for('admin'))
-
-    reason = request.form.get('reason', 'Rejected by admin')
-    campaigns[id]['status'] = 'Rejected'
-    campaigns[id]['reason'] = reason
-
+    if 0 <= id < len(campaigns):
+        reason = request.form.get('reason', 'Rejected by admin')
+        campaigns[id]['status'] = 'Rejected'
+        campaigns[id]['reason'] = reason
     return redirect(url_for('admin'))
 
 @app.route('/bulk-approve', methods=['POST'])
